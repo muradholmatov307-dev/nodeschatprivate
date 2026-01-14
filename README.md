@@ -1,0 +1,2 @@
+# nodeschatprivate
+PrivateChatOnly
