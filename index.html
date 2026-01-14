@@ -3,192 +3,217 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P Private Node</title>
+    <title>Discord Node P2P</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
-        :root { --bg: #0a0a0a; --panel: #141414; --text: #00ff41; --border: #00ff41; --msg: #111; --accent: #00ff41; }
-        [data-theme="light"] { --bg: #ffffff; --panel: #f0f0f0; --text: #222; --border: #333; --msg: #e1e1e1; --accent: #007bff; }
+        :root {
+            --bg-main: #313338;
+            --bg-side: #2b2d31;
+            --bg-chat: #313338;
+            --text-main: #dbdee1;
+            --accent: #5865f2;
+            --danger: #f23f42;
+            --success: #23a559;
+        }
 
-        body { background: var(--bg); color: var(--text); font-family: 'Consolas', monospace; margin: 0; padding: 10px; transition: 0.3s; }
-        .app { max-width: 500px; margin: auto; border: 1px solid var(--border); background: var(--panel); position: relative; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'gg sans', 'Noto Sans', sans-serif; background: #000; overflow: hidden; }
         
-        .header { background: #000; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-        #chat { height: 400px; overflow-y: auto; padding: 15px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
-        
-        .m { padding: 8px 12px; background: var(--msg); border: 1px solid var(--border); max-width: 85%; align-self: flex-start; }
-        .m.own { align-self: flex-end; border-color: #888; }
-        .m b { font-size: 10px; opacity: 0.7; display: block; margin-bottom: 4px; }
-        
-        .sticker { max-width: 120px; display: block; margin-top: 5px; cursor: pointer; }
-        .sticker-panel { display: none; padding: 10px; background: var(--panel); border-top: 1px solid var(--border); grid-template-columns: repeat(4, 1fr); gap: 5px; }
-        .sticker-panel img { width: 100%; cursor: pointer; border: 1px solid transparent; }
-        .sticker-panel img:hover { border-color: var(--accent); }
+        /* Экран блокировки */
+        #lock-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #1e1f22; z-index: 9999; display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; color: white;
+        }
 
-        .controls { padding: 10px; background: var(--panel); border-top: 1px solid var(--border); }
-        .row { display: flex; gap: 5px; margin-bottom: 8px; }
+        .app-container { display: flex; height: 100vh; width: 100vw; background: var(--bg-main); display: none; }
         
-        input { flex: 1; background: #000; border: 1px solid var(--border); color: var(--text); padding: 10px; outline: none; }
-        [data-theme="light"] input { background: #fff; color: #000; }
+        /* Сайдбар */
+        .sidebar { width: 240px; background: var(--bg-side); display: flex; flex-direction: column; padding: 10px; border-right: 1px solid #262729; }
+        .id-card { background: #1e1f22; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
         
-        button { background: transparent; color: var(--text); border: 1px solid var(--border); padding: 8px 12px; cursor: pointer; transition: 0.2s; }
-        button:hover { background: var(--text); color: #000; }
+        /* Чат */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-chat); }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { display: flex; flex-direction: column; color: var(--text-main); }
+        .msg b { color: #fff; font-size: 14px; margin-bottom: 4px; }
+        .msg-content { background: #383a40; padding: 10px; border-radius: 8px; align-self: flex-start; max-width: 80%; }
+        .sticker { max-width: 250px; border-radius: 8px; margin-top: 5px; display: block; border: 1px solid #444; }
+
+        /* Ввод */
+        .input-box { padding: 20px; background: var(--bg-chat); }
+        .input-wrapper { background: #383a40; border-radius: 8px; display: flex; padding: 10px; gap: 10px; }
+        input { border: none; background: none; color: white; flex: 1; outline: none; font-size: 15px; }
+
+        /* Звонок */
+        .call-overlay {
+            position: fixed; top: 20px; right: 20px; width: 300px; background: #1e1f22; 
+            border-radius: 12px; padding: 20px; box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            display: none; text-align: center; color: white; border: 1px solid var(--accent); z-index: 1000;
+        }
         
-        .call-ui { display: none; position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(180,0,0,0.9); z-index: 10; flex-direction: column; align-items: center; justify-content: center; }
-        #my-id-display { font-weight: bold; text-decoration: underline; cursor: pointer; }
+        .btn { border: none; border-radius: 4px; padding: 10px 20px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-blue { background: var(--accent); }
+        .btn-red { background: var(--danger); }
+        .btn-green { background: var(--success); }
     </style>
 </head>
-<body data-theme="dark">
+<body>
 
-<div class="app">
-    <div id="incoming_call" class="call-ui">
-        <i class="fas fa-phone-alt fa-3x" style="margin-bottom: 20px;"></i>
-        <div style="font-size: 20px; margin-bottom: 20px;">ВХОДЯЩИЙ ВЫЗОВ</div>
-        <div>
-            <button onclick="acceptCall()" style="background:#fff; color:#000; border:none; padding: 15px 30px;"><i class="fas fa-check"></i> ОТВЕТИТЬ</button>
-            <button onclick="location.reload()" style="border-color:#fff; color:#fff; margin-left: 10px;"><i class="fas fa-times"></i></button>
+<div id="lock-screen">
+    <i class="fab fa-discord fa-4x" style="color: var(--accent); margin-bottom: 20px;"></i>
+    <div id="lock-status">Проверка доступа по IP...</div>
+</div>
+
+<div class="call-overlay" id="call-ui">
+    <div style="margin-bottom: 15px;"><b id="caller-name">Входящий вызов...</b></div>
+    <div style="display: flex; justify-content: space-around;">
+        <button class="btn btn-green" onclick="answerCall()"><i class="fas fa-phone"></i> Принять</button>
+        <button class="btn btn-red" onclick="rejectCall()"><i class="fas fa-phone-slash"></i> Отклонить</button>
+    </div>
+    <audio id="ringtone" loop src="https://www.soundjay.com/phone/phone-calling-1.mp3"></audio>
+</div>
+
+<div class="app-container" id="app">
+    <div class="sidebar">
+        <div class="id-card">
+            <div style="font-size: 11px; color: #aaa; margin-bottom: 5px;">ВАШ ID</div>
+            <div id="my-id" style="color: var(--accent); font-weight: bold; cursor:pointer;" onclick="copyID()">ЗАГРУЗКА...</div>
+        </div>
+        <button class="btn btn-blue" onclick="startCall()" style="width:100%"><i class="fas fa-video"></i> Позвонить</button>
+        <div style="margin-top: 20px;">
+            <input type="text" id="peer-id-input" placeholder="ID друга" style="width: 80%; background: #1e1f22; margin-bottom: 10px; border-radius: 4px; padding: 8px;">
+            <button class="btn btn-blue" onclick="connectToPeer()" style="width:100%">Подключить чат</button>
         </div>
     </div>
 
-    <div class="header">
-        <div>ID: <span id="my-id-display" onclick="copyId()">...</span></div>
-        <div>
-            <button onclick="toggleTheme()"><i class="fas fa-adjust"></i></button>
-            <button onclick="startVoice()"><i class="fas fa-phone"></i></button>
+    <div class="chat-area">
+        <div id="messages"></div>
+        <div class="input-box">
+            <div class="input-wrapper">
+                <button style="background:none; border:none; color: #b5bac1; cursor:pointer;" onclick="document.getElementById('file-input').click()"><i class="fas fa-plus-circle fa-lg"></i></button>
+                <input type="text" id="msg-input" placeholder="Написать сообщение..." onkeypress="if(event.key==='Enter') sendMsg()">
+                <input type="file" id="file-input" style="display:none" onchange="sendFile(this)">
+            </div>
         </div>
-    </div>
-
-    <div id="chat">
-        <div class="m"><b>СИСТЕМА</b>Подключение к зашифрованной сети...</div>
-    </div>
-
-    <div id="sticker-panel" class="sticker-panel">
-        <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJndmR4ZWZ4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1z/3o7TKMGpxx6rDS0M00/giphy.gif" onclick="sendSticker(this.src)">
-        <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJndmR4ZWZ4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1z/l41lTfuxV5Wz1yP6M/giphy.gif" onclick="sendSticker(this.src)">
-        <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJndmR4ZWZ4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1z/3o7TKVUn7iM8FMEU24/giphy.gif" onclick="sendSticker(this.src)">
-        <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJndmR4ZWZ4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1z/26vUAAqMhH7R36UvK/giphy.gif" onclick="sendSticker(this.src)">
-    </div>
-
-    <div class="controls">
-        <div class="row">
-            <input type="text" id="target-id" placeholder="ID ЦЕЛИ">
-            <button onclick="connectToPeer()"><i class="fas fa-link"></i></button>
-        </div>
-        <div class="row">
-            <button onclick="toggleStickers()"><i class="fas fa-smile"></i></button>
-            <input type="text" id="msg-input" placeholder="Введите сообщение..." onkeypress="if(event.key==='Enter') sendMsg()">
-            <button onclick="sendMsg()"><i class="fas fa-paper-plane"></i></button>
-        </div>
-        <button onclick="document.getElementById('file-input').click()" style="width:100%"><i class="fas fa-paperclip"></i> ПЕРЕДАТЬ ФАЙЛ</button>
-        <input type="file" id="file-input" style="display:none" onchange="sendFile(this)">
     </div>
 </div>
 
 <script>
-    let myId = Math.random().toString(36).substr(2, 4).toUpperCase();
-    const peer = new Peer('NODE-' + myId, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+    // --- НАСТРОЙКИ ДОСТУПА ---
+    const allowedIPs = ['188.19.61.123', '127.0.0.1']; // Впиши сюда IP тех, кому можно входить
 
-    let conn;
-    let callActive;
+    async function checkAccess() {
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            const userIP = data.ip;
 
-    peer.on('open', (id) => {
-        document.getElementById('my-id-display').innerText = myId;
-        log("СИСТЕМА", "Узел активен. HTTPS подтвержден.");
-    });
+            if (allowedIPs.includes(userIP)) {
+                document.getElementById('lock-screen').style.display = 'none';
+                document.getElementById('app').style.display = 'flex';
+                initPeer();
+            } else {
+                document.getElementById('lock-status').innerHTML = `<span style="color:red">ОТКАЗАНО: Твой IP (${userIP}) не в списке.</span>`;
+            }
+        } catch (e) {
+            document.getElementById('lock-status').innerText = "Ошибка проверки IP. Обновите страницу.";
+        }
+    }
 
-    peer.on('connection', (c) => { 
-        conn = c; 
-        setupConn(); 
-    });
+    // --- LOGIC ---
+    let myId = Math.random().toString(36).substr(2, 5).toUpperCase();
+    let peer, conn, currentCall;
 
-    peer.on('call', (call) => {
-        callActive = call;
-        document.getElementById('incoming_call').style.display = 'flex';
-    });
-
-    function connectToPeer() {
-        const tId = document.getElementById('target-id').value.toUpperCase();
-        conn = peer.connect('NODE-' + tId);
-        setupConn();
+    function initPeer() {
+        peer = new Peer('DS-' + myId, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+        
+        peer.on('open', id => document.getElementById('my-id').innerText = myId);
+        
+        peer.on('connection', c => { conn = c; setupConn(); });
+        
+        peer.on('call', call => {
+            currentCall = call;
+            document.getElementById('call-ui').style.display = 'block';
+            document.getElementById('ringtone').play();
+        });
     }
 
     function setupConn() {
-        conn.on('open', () => log("СИСТЕМА", "Канал связи открыт."));
-        conn.on('data', (data) => {
-            if (data.type === 'sticker') log("СОБЕСЕДНИК", `<img src="${data.url}" class="sticker">`);
-            else if (data.type === 'file') handleFileData(data);
-            else log("СОБЕСЕДНИК", data);
+        conn.on('data', data => {
+            if (data.file) handleFile(data);
+            else renderMsg("Собеседник", data);
         });
     }
 
     function sendMsg() {
-        const msg = document.getElementById('msg-input').value;
-        if(conn && conn.open) {
-            conn.send(msg);
-            log("ВЫ", msg, true);
-            document.getElementById('msg-input').value = '';
-        }
+        const val = document.getElementById('msg-input').value;
+        if(!val || !conn) return;
+        conn.send(val);
+        renderMsg("Вы", val, true);
+        document.getElementById('msg-input').value = '';
     }
 
-    function toggleStickers() {
-        const panel = document.getElementById('sticker-panel');
-        panel.style.display = panel.style.display === 'grid' ? 'none' : 'grid';
-    }
-
-    function sendSticker(url) {
-        if(conn && conn.open) {
-            conn.send({type: 'sticker', url: url});
-            log("ВЫ", `<img src="${url}" class="sticker">`, true);
-            toggleStickers();
-        }
-    }
-
-    function sendFile(input) {
-        const file = input.files[0];
-        if(conn && conn.open && file) {
-            conn.send({ type: 'file', file: file, fileName: file.name, fileType: file.type });
-            log("ВЫ", `Файл отправлен: ${file.name}`, true);
-        }
-    }
-
-    function handleFileData(data) {
-        const blob = new Blob([data.file], {type: data.fileType});
-        const url = URL.createObjectURL(blob);
-        log("СОБЕСЕДНИК", `<a href="${url}" download="${data.fileName}" style="color:var(--accent)">💾 Скачать ${data.fileName}</a>`);
-    }
-
-    async function startVoice() {
-        const tId = document.getElementById('target-id').value.toUpperCase();
-        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-        const call = peer.call('NODE-' + tId, stream);
-        call.on('stream', rs => { const a = new Audio(); a.srcObject = rs; a.play(); });
-        log("СИСТЕМА", "Вызов инициирован...");
-    }
-
-    async function acceptCall() {
-        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-        callActive.answer(stream);
-        document.getElementById('incoming_call').style.display = 'none';
-        callActive.on('stream', rs => { const a = new Audio(); a.srcObject = rs; a.play(); });
-    }
-
-    function toggleTheme() {
-        document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-    }
-
-    function copyId() {
-        navigator.clipboard.writeText(myId);
-        alert("ID скопирован: " + myId);
-    }
-
-    function log(user, msg, own = false) {
-        const chat = document.getElementById('chat');
+    function renderMsg(user, text, isOwn = false) {
+        const messages = document.getElementById('messages');
         const div = document.createElement('div');
-        div.className = 'm' + (own ? ' own' : '');
-        div.innerHTML = `<b>${user}</b>${msg}`;
-        chat.appendChild(div);
-        chat.scrollTop = chat.scrollHeight;
+        div.className = 'msg';
+        
+        // Проверка на картинку/стикер
+        const isImg = /(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))/i.test(text);
+        const content = isImg ? `<img src="${text}" class="sticker">` : text;
+
+        div.innerHTML = `<b>${user}</b><div class="msg-content">${content}</div>`;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
     }
+
+    function connectToPeer() {
+        const tid = document.getElementById('peer-id-input').value.toUpperCase();
+        conn = peer.connect('DS-' + tid);
+        setupConn();
+        renderMsg("Система", "Запрос на соединение отправлен...");
+    }
+
+    async function startCall() {
+        const tid = document.getElementById('peer-id-input').value.toUpperCase();
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        const call = peer.call('DS-' + tid, stream);
+        call.on('stream', s => playStream(s));
+    }
+
+    function answerCall() {
+        navigator.mediaDevices.getUserMedia({audio: true}).then(stream => {
+            currentCall.answer(stream);
+            currentCall.on('stream', s => playStream(s));
+            stopRingtone();
+        });
+    }
+
+    function rejectCall() {
+        stopRingtone();
+        currentCall.close();
+        document.getElementById('call-ui').style.display = 'none';
+    }
+
+    function stopRingtone() {
+        document.getElementById('ringtone').pause();
+        document.getElementById('call-ui').style.display = 'none';
+    }
+
+    function playStream(stream) {
+        const audio = new Audio();
+        audio.srcObject = stream;
+        audio.play();
+        renderMsg("Система", "Звонок активен");
+    }
+
+    function copyID() {
+        navigator.clipboard.writeText(myId);
+        alert("ID скопирован!");
+    }
+
+    checkAccess();
 </script>
 </body>
 </html>
